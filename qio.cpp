@@ -1,5 +1,4 @@
 #include "qio.h"
-#include "target_sys.h"
 
 using qIO::layeredOut;
 using qIO::size2d;

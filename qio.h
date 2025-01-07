@@ -12,6 +12,8 @@
 
 #include <mutex>
 
+#include "target_sys.h"
+
 namespace qIO{
 
 template<class T>
@@ -37,22 +39,24 @@ struct size2d : public std::array<T, 2>{
 
 	size2d() = default;
 
-	size2d(T w, T h):std::array<T, 2>{w, h}{std::cout<<"init"<<std::endl;}
+	size2d(T w, T h) noexcept
+	:	std::array<T, 2>{w, h}
+	{}
 
 	template<class U, typename = std::enable_if_t<std::is_convertible_v<U, T>>>
-	size2d(const size2d<U> &other):std::array<T, 2>(other.array){std::cout<<"copy"<<std::endl;}
+	size2d(const size2d<U> &other) noexcept
+	:	std::array<T, 2>(other.array)
+	{}
 
 	template<class U, typename = std::enable_if_t<std::is_convertible_v<U, T>>>
 	size2d(size2d<U> &&other):std::array<T, 2>(std::move(other.array)){std::cout<<"move"<<std::endl;}
 
-	size2d& operator=(const size2d &other){
-		std::cout<<"copy assign"<<std::endl;
+	size2d& operator=(const size2d &other) noexcept{
 		this->array::operator=(other);
 		return *this;
 	}
 
-	size2d& operator=(size2d &&other){
-		std::cout<<"move assign"<<std::endl;
+	size2d& operator=(size2d &&other) noexcept{
 		if(this!=&other)
 			this->array::operator=(std::move(other));
 		return *this;
@@ -67,7 +71,7 @@ private:
 	using uchar = unsigned char;
 	using rawListIter = std::array<uchar,sizeof(std::list<int>::iterator)>;
 	using rawVectorIter = std::array<uchar,sizeof(std::vector<int>::iterator)>;
-	using winSize_t = size2d<unsigned short>;
+	using winSize_t = size2d<decltype(winsize)>;
 
 	class spinlock{
 	private:
@@ -126,7 +130,8 @@ private:
 	template<threeWayStrongComparable_t T>
 	class order{
 	private:
-		std::array<std::vector<std::vector<T>>,3> finalLayer;
+		std::array<std::vector<std::vector<T>>,3> oLayer;
+		std::list<T> orderList;
 	};
 
 public:
