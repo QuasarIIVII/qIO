@@ -1,0 +1,18 @@
+#include<iostream>
+#include"qio.h"
+#include<shared_mutex>
+#include<condition_variable>
+#include"detect_target.h"
+#include<unistd.h>
+#include<sys/ioctl.h>
+
+int main() {
+	qIO::layeredOut lo;
+	std::cout<<static_cast<uint16_t>(lo.state())<<std::endl;
+	lo.debug();
+	std::cout<<sizeof(std::unique_lock<std::mutex>)<<std::endl;
+	std::cout << "Hello, World!" << std::endl;
+	std::cout<<std::hex<<target_sys::target_sys<<std::endl;
+	std::cout<<sizeof(winsize)<<std::endl;
+	return 0;
+}
