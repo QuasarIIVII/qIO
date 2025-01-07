@@ -1,5 +1,5 @@
 #include "qio.h"
-#include "detect_target.h"
+#include "target_sys.h"
 
 using qIO::layeredOut;
 using qIO::size2d;

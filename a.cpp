@@ -2,7 +2,7 @@
 #include"qio.h"
 #include<shared_mutex>
 #include<condition_variable>
-#include"detect_target.h"
+#include"target_sys.h"
 #include<unistd.h>
 #include<sys/ioctl.h>
 
