@@ -14,6 +14,10 @@
 
 #include "target_sys.h"
 
+#if __has_include(<unistd.h>) && __has_include(<sys/ioctl.h>)
+#include<sys/ioctl.h>
+#endif
+
 namespace qIO{
 
 template<class T>
@@ -65,13 +69,20 @@ struct size2d : public std::array<T, 2>{
 
 class layeredOut{
 
-private:
+private: // section private types
 	static constexpr struct key_t{} key{};
 
 	using uchar = unsigned char;
+	using state_t = uint32_t;
 	using rawListIter = std::array<uchar,sizeof(std::list<int>::iterator)>;
 	using rawVectorIter = std::array<uchar,sizeof(std::vector<int>::iterator)>;
-	using winSize_t = size2d<decltype(winsize)>;
+
+#if __has_include(<unistd.h>)
+	static_assert(sizeof(winsize::ws_col)==sizeof(winsize::ws_row));
+	using winSize_t = size2d<decltype(winsize::ws_col)>;
+#endif
+
+	struct shared_t;
 
 	class spinlock{
 	private:
@@ -91,7 +102,7 @@ private:
 	struct charColorData{
 		uint32_t fg, bg;
 
-		charColorData() = default;
+		charColorData() noexcept = default;
 
 		charColorData(charColorData&) noexcept;
 		charColorData(const charColorData&) noexcept;
@@ -108,7 +119,7 @@ private:
 		charColorData color;
 		uchar offset;
 
-		charData() = default;
+		charData() noexcept = default;
 
 		charData(charData&) noexcept;
 		charData(const charData&) noexcept;
@@ -128,13 +139,21 @@ private:
 	};
 
 	template<threeWayStrongComparable_t T>
-	class order{
+	class order_t{
 	private:
 		std::array<std::vector<std::vector<T>>,3> oLayer;
 		std::list<T> orderList;
+
+	public:
+		order_t(state_t &, const winSize_t &) noexcept;
+		~order_t() noexcept = default;
 	};
 
-public:
+	struct shared_t{
+		size_t hash_order_type;
+	};
+
+public: // section public types
 	class layer{
 	private:
 		bool isValid;
@@ -142,55 +161,71 @@ public:
 		std::ostringstream oss;
 
 	public:
-		layer(int, key_t); // create an invalid layer
+		layer(int, key_t) noexcept; // create an invalid layer
 		layer(const layer&) = delete;
-		layer(layer&&);
+		layer(layer&&) noexcept;
 	};
 
-private:
+private: // section private variables
 	winSize_t winSize_v;
 	/*
 	 * state_v & n
 	 * 0x01: runable
 	 * 0x02: running
+	 * 0x8000'0000: error occured
 	 */
-	uint8_t state_v;
+	state_t state_v;
 
 	std::array<std::vector<std::vector<charData>>, 3> oLayer; // output layer
+	void *order;
 
-private:
+	shared_t shared;
+
+private: // section private function pointers
+	void (*deleteOrder)(layeredOut&) noexcept;
+
+private: // section private static function declarations
 	static winSize_t winSize_f();
-	static int _charWidth(const char32_t&);
+	static int _charWidth(const char32_t&) noexcept;
 
-public:
-	winSize_t winSize() const;
+	template<threeWayStrongComparable_t T>
+	static void _deleteOrder(layeredOut&) noexcept;
 
-public:
+public: // section public constructor and destructor declarations
 	template<threeWayStrongComparable_t T = int32_t>
 	explicit layeredOut(
 		uint32_t bgColor=0xff'000000
-	);
-	~layeredOut();
+	) noexcept;
+	~layeredOut() noexcept;
 
-public:
-	decltype(state_v) state() const;
+public: // section public function declarations
+	winSize_t winSize() const noexcept;
+	state_t state() const noexcept;
 
 	template<threeWayStrongComparable_t T>
-	layer createLayer(size2d<size_t> size, T order);
+	layer createLayer(size2d<size_t> size, T order) noexcept;
 
-public:
+public: // section debug function declarations
 	void debug();
 }; // scope end : class layeredOut
 
 // Implementation of qIO::layeredOut
 
-template<threeWayStrongComparable_t order_t>
+template<threeWayStrongComparable_t order_type>
+void layeredOut::_deleteOrder(layeredOut &lo) noexcept{
+	delete static_cast<order_t<order_type>*>(lo.order);
+}
+
+template<threeWayStrongComparable_t order_type>
 layeredOut::layeredOut(
 	uint32_t bgColor
-)
+) noexcept
 :	winSize_v(winSize_f())
 ,	state_v(0)
 {
+	static const size_t hash_order_type = typeid(order_type).hash_code();
+	shared.hash_order_type = hash_order_type;
+
 	std::cout<<winSize_v.w<<'x'<<winSize_v.h<<std::endl;
 	if(!winSize_v.w){
 		// state_v &= ~ 0x01;
@@ -207,14 +242,43 @@ layeredOut::layeredOut(
 			)
 		);
 	}catch(std::exception &e){
-		std::cerr<<e.what()<<std::endl;
+//		std::cerr<<e.what()<<std::endl;
 		// state_v &= ~ 0x01;
 		return;
 	}
 
+	// noexcept
+	order_t<order_type> *order = new(std::nothrow) order_t<order_type>(state_v, winSize_v);
+	if(!order || (state_v & 0x8000'0000) ){
+		// state_v &= ~ 0x01;
+		return;
+	}
+
+	this->order = order;
+	deleteOrder = _deleteOrder<order_type>;
+
+	std::setlocale(LC_ALL, "en_US.utf8");
+
 	state_v |= 0x01;
 }
 
+// Implementation of qIO::layeredOut::order_t
+
+template<threeWayStrongComparable_t T>
+layeredOut::order_t<T>::order_t(state_t &state_v, const winSize_t &winSize) noexcept{
+	try{
+		oLayer[0] = oLayer[1] = oLayer[2]
+		= std::vector<std::vector<T>>(
+			winSize.h,
+			std::vector<T>(winSize.w)
+		);
+	}catch(std::exception &e){
+//		std::cerr<<e.what()<<std::endl;
+		state_v |= 0x8000'0000;
+		return;
+	}
 }
+
+} // scope end : namespace qIO
 
 #endif//__qIO_H__

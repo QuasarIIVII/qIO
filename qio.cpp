@@ -106,7 +106,7 @@ layeredOut::charData& layeredOut::charData::operator=(charData&& other) noexcept
 
 // Implementation of qIO::layeredOut::layer
 
-layeredOut::layer::layer(int, key_t)
+layeredOut::layer::layer(int, key_t) noexcept
 :	isValid(false)
 {}
 
@@ -152,7 +152,7 @@ void layeredOut::debug(){
 
 // Implementation of qIO::layeredOut
 
-#if __has_include(<unistd.h>)
+#if __has_include(<unistd.h>) && __has_include(<sys/ioctl.h>)
 #include<unistd.h>
 #include<sys/ioctl.h>
 #endif
@@ -168,9 +168,10 @@ layeredOut::winSize_t layeredOut::winSize_f(){
 		return winSize_t{0, 0};
 }
 
-layeredOut::~layeredOut(){
+layeredOut::~layeredOut() noexcept{
+	deleteOrder(*this);
 }
 
-decltype(layeredOut::state_v) layeredOut::state() const{
+layeredOut::state_t layeredOut::state() const noexcept{
 	return state_v;
 }
