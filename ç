@@ -153,7 +153,7 @@ private: // section private type declarations
 		order_t(state_t &, const winSize_t &) noexcept;
 		~order_t() noexcept = default;
 
-		static std::optional<rawListIter> createLayer(void *inst_p, const void *order_p) noexcept;
+		static std::optional<rawListIter> createLayer(void *inst_p, void *order_p) noexcept;
 	};
 
 	struct shared_t{
@@ -161,12 +161,10 @@ private: // section private type declarations
 	};
 
 public: // section public types
-	class layerStream;
-
 	class layer{
 	private:
 		std::list<layerData>::iterator iter;
-		winPoint_t cursor;
+		std::ostringstream oss;
 
 		shared_t *shared; // layer (*this) is invalid if shared == nullptr
 
@@ -174,29 +172,7 @@ public: // section public types
 		layer(std::list<layerData>::iterator, shared_t *, key_t) noexcept;
 		layer(int, key_t) noexcept; // create an invalid layer (shared = nullptr)
 		layer(const layer&) = delete;
-		layer(layer&&) noexcept = default;
-
-	public:
-		template<class T>
-		layerStream operator<<(const T&) noexcept;
-	};
-
-	class layerStream{
-	private:
-		layer &layer_v;
-		std::ostringstream oss;
-
-	public:
-		layerStream(layer&, key_t) noexcept;
-
-		layerStream(const layerStream&) = delete;
-		layerStream(layerStream&&) noexcept;
-
-		~layerStream() noexcept;
-
-	public:
-		template<class T>
-		layerStream&& operator<<(const T&) noexcept;
+		layer(layer&&) noexcept;
 	};
 
 private: // section private variables
@@ -219,7 +195,7 @@ private: // section private variables
 
 private: // section private function pointers
 	void (*deleteOrder)(layeredOut&) noexcept;
-	std::optional<rawListIter> (*orderCreateLayer)(void *inst, const void *order) noexcept;
+	std::optional<rawListIter> (*orderCreateLayer)(void *inst, void *order) noexcept;
 
 private: // section private static function declarations
 	static winSize_t winSize_f() noexcept;
@@ -307,21 +283,21 @@ layeredOut::layer layeredOut::createLayer(winSize_t size, const T& order_v) noex
 		return layer(0, key);
 
 	try{
-		std::optional<layeredOut::rawListIter> orderIter = orderCreateLayer(this->order, &order_v);
+		std::optional<layeredOut::rawListIter> orderIter = orderCreateLayer(order, order_v);
 		if(!orderIter)
 			return layer(0, key);
 
 		layerList.emplace_back(layerData{
 			.visible = true,
+			.pos = {0, 0},
+			.orderIter = std::move(*orderIter),
 			.data = std::vector<std::vector<charData>>(
 				size.h,
 				std::vector<charData>(
 					size.w,
 					charData()
 				)
-			),
-			.pos = {0, 0},
-			.orderIter = std::move(*orderIter)
+			)
 		});
 	}catch(...){
 		return layer(0, key);
@@ -348,38 +324,18 @@ layeredOut::order_t<T>::order_t(state_t &state_v, const winSize_t &winSize) noex
 
 template<threeWayStrongComparable_t T>
 std::optional<layeredOut::rawListIter> layeredOut::order_t<T>::createLayer(
-	void *inst_p, const void *order_v
+	void *inst_p, void *order_p
 ) noexcept
 {
-	order_t<T>& inst = *static_cast<order_t<T>*>(inst_p);
+	order_t<T>& inst = *static_cast<order_t<T>*>(order_p);
 
 	try{
-		inst.layerList.push_back(*static_cast<T*>(const_cast<void*>(order_v)));
+		inst.layerList.emplace_back(*static_cast<T*>(order_p));
 	}catch(...){
 		return std::nullopt;
 	}
 
 	return std::bit_cast<rawListIter>(std::prev(inst.layerList.end()));
-}
-
-// Implementation of qIO::layeredOut::layer
-
-template<class T>
-layeredOut::layerStream layeredOut::layer::operator<<(const T& a) noexcept{
-	std::cout<<"layer::operator<<(const T&)"<<std::endl;
-	layerStream ls(*this, key);
-	ls << a;
-	return ls;
-//	return std::move(ls); // debug for when NRVO is disabled
-}
-
-// Implementation of qIO::layeredOut::layerStream
-
-template<class T>
-layeredOut::layerStream&& layeredOut::layerStream::operator<<(const T& a) noexcept{
-	std::cout<<"layerStream::operator<<(const T&)"<<std::endl;
-//	oss << a;
-	return std::move(*this);
 }
 
 } // scope end : namespace qIO
