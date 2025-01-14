@@ -36,7 +36,10 @@ layeredOut::charColorData& layeredOut::charColorData::operator=(charColorData& o
 	return *this;
 }
 
-layeredOut::charColorData& layeredOut::charColorData::operator=(const charColorData& other) noexcept{
+layeredOut::charColorData& layeredOut::charColorData::operator=(
+	const charColorData& other
+) noexcept
+{
 	if constexpr(alignof(charColorData)==alignof(uint64_t))
 		*reinterpret_cast<uint64_t*>(this) = reinterpret_cast<const uint64_t&>(other);
 	else
@@ -45,7 +48,10 @@ layeredOut::charColorData& layeredOut::charColorData::operator=(const charColorD
 	return *this;
 }
 
-layeredOut::charColorData& layeredOut::charColorData::operator=(charColorData&& other) noexcept{
+layeredOut::charColorData& layeredOut::charColorData::operator=(
+	charColorData&& other
+) noexcept
+{
 	if constexpr(alignof(charColorData)==alignof(uint64_t))
 		*reinterpret_cast<uint64_t*>(this) = reinterpret_cast<uint64_t&&>(other);
 	else
@@ -107,7 +113,7 @@ layeredOut::charData& layeredOut::charData::operator=(charData&& other) noexcept
 // Implementation of qIO::layeredOut::layer
 
 layeredOut::layer::layer(std::list<layerData>::iterator iter, shared_t *shared, key_t) noexcept
-:	iter(iter), cursor({0,0}), shared(shared)
+:	iter(iter), cursor_v({0,0}), shared(shared)
 {}
 
 layeredOut::layer::layer(int, key_t) noexcept

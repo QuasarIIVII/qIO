@@ -6,6 +6,8 @@
 
 #include <cstdint>
 
+#include <cstring>
+
 #include <array>
 #include <vector>
 #include <list>
@@ -22,6 +24,11 @@
 #include<sys/ioctl.h>
 #endif
 
+/*
+ * `small size` means its size is small enough to be copied by a few instructions. (no move needed)
+ * - e.g. <= 16 bytes
+ */
+
 namespace qIO{
 
 template<class T>
@@ -30,8 +37,42 @@ concept three_way_strong_comparable = std::three_way_comparable<T, std::strong_o
 template<class T>
 constexpr bool is_three_way_strong_comparable_v = three_way_strong_comparable<T>;
 
-template<class T> concept threeWayStrongComparable_t = is_three_way_strong_comparable_v<T>;
+template<class T>
+concept threeWayStrongComparable_t = is_three_way_strong_comparable_v<T>;
 
+template<class T>
+struct moveOnly{
+	T a;
+	moveOnly() = default;
+	moveOnly(const moveOnly&) = delete;
+	moveOnly(moveOnly&&) = default;
+
+	moveOnly& operator=(const moveOnly&) = delete;
+	moveOnly& operator=(moveOnly&&) = default;
+
+	moveOnly(T &&a) : a(std::move(a)) {}
+};
+
+template<class T, std::size_t N>
+struct array : public std::array<T, N>{
+	constexpr array() noexcept = default;
+
+	template<class U = T>
+	constexpr array(const array<U, N>& other)
+	requires std::is_convertible_v<U, T> && std::copyable<T>
+	{
+		std::copy(other.begin(), other.end(), this->begin());
+	}
+
+	constexpr array(std::initializer_list<T> init) noexcept
+	requires std::copyable<T> && std::default_initializable<T>
+	{
+		if(init.size() <= N)
+			std::copy(init.begin(), init.end(), this->begin());
+		else
+			std::copy(init.begin(), init.begin()+N, this->begin());
+	}
+};
 
 template<class T>
 struct point2d : public std::array<T, 2>{
@@ -39,32 +80,28 @@ struct point2d : public std::array<T, 2>{
 	T &y = (*this)[1];
 };
 template<class T>
-struct size2d : public std::array<T, 2>{
+struct size2d : public qIO::array<T, 2>{
 	T &w = (*this)[0];
 	T &h = (*this)[1];
 
 	size2d() = default;
 
-	size2d(T w, T h) noexcept
-	:	std::array<T, 2>{w, h}
+	template<class... U>
+	requires (std::is_convertible_v<U, T> && ...)
+	size2d(U... args) noexcept
+	:	qIO::array<T, 2>{static_cast<T>(args)...}
 	{}
 
-	template<class U, typename = std::enable_if_t<std::is_convertible_v<U, T>>>
+	size2d(const size2d&) noexcept = default;
+
+	template<class U = T>
+	requires std::is_convertible_v<U, T>
 	size2d(const size2d<U> &other) noexcept
-	:	std::array<T, 2>(other.array)
+	:	qIO::array<T, 2>(other)
 	{}
-
-	template<class U, typename = std::enable_if_t<std::is_convertible_v<U, T>>>
-	size2d(size2d<U> &&other):std::array<T, 2>(std::move(other.array)){std::cout<<"move"<<std::endl;}
 
 	size2d& operator=(const size2d &other) noexcept{
-		this->array::operator=(other);
-		return *this;
-	}
-
-	size2d& operator=(size2d &&other) noexcept{
-		if(this!=&other)
-			this->array::operator=(std::move(other));
+		this->qIO::array<T, 2>::operator=(other);
 		return *this;
 	}
 };
@@ -82,8 +119,8 @@ private: // section private type aliases
 public: // section public type aliases
 #if __has_include(<unistd.h>)
 	static_assert(sizeof(winsize::ws_col)==sizeof(winsize::ws_row));
-	using winSize_t = size2d<decltype(winsize::ws_col)>;
-	using winPoint_t = point2d<decltype(winsize::ws_col)>;
+	using winSize_t = size2d<decltype(winsize::ws_col)>;	// will be small size
+	using winPoint_t = point2d<decltype(winsize::ws_col)>;	// will be small size
 #endif
 
 private: // section private type declarations
@@ -153,7 +190,9 @@ private: // section private type declarations
 		order_t(state_t &, const winSize_t &) noexcept;
 		~order_t() noexcept = default;
 
-		static std::optional<rawListIter> createLayer(void *inst_p, const void *order_p) noexcept;
+		static std::optional<rawListIter> createLayer(
+			void *inst_p, const void *order_p
+		) noexcept;
 	};
 
 	struct shared_t{
@@ -164,27 +203,34 @@ public: // section public types
 	class layerStream;
 
 	class layer{
-	private:
+	private: // section private variables
 		std::list<layerData>::iterator iter;
-		winPoint_t cursor;
+		winPoint_t cursor_v;
 
 		shared_t *shared; // layer (*this) is invalid if shared == nullptr
 
-	public:
+	public: // section public constructor and destructor declarations
 		layer(std::list<layerData>::iterator, shared_t *, key_t) noexcept;
 		layer(int, key_t) noexcept; // create an invalid layer (shared = nullptr)
 		layer(const layer&) = delete;
 		layer(layer&&) noexcept = default;
 
+	public: // section layeredOut internal function declarations
+
 	public:
 		template<class T>
 		layerStream operator<<(const T&) noexcept;
-	};
+
+		// getters and setters
+		winPoint_t cursor() const noexcept;
+		void cursor(const winPoint_t&) noexcept;
+	}; // scope end : class layer
 
 	class layerStream{
 	private:
 		layer &layer_v;
-		std::ostringstream oss;
+		winPoint_t cursor_v;
+		std::ostringstream oss; // default constructor
 
 	public:
 		layerStream(layer&, key_t) noexcept;
@@ -197,11 +243,11 @@ public: // section public types
 	public:
 		template<class T>
 		layerStream&& operator<<(const T&) noexcept;
-	};
+	}; // scope end : class layerStream
 
 private: // section private variables
 	/*
-	 * state_v & n
+	 * state_v
 	 * 0x01: runable
 	 * 0x02: running
 	 * 0x8000'0000: error occured
@@ -261,6 +307,15 @@ layeredOut::layeredOut(
 ,	winSize_v(winSize_f())
 {
 	static_assert(sizeof(rawListIter) == sizeof(typename std::list<order_type>::iterator));
+	// test
+	winSize_t a = winSize_f();
+	size2d<size_t> b(a);
+
+	b.w = 0;
+
+	b = a;
+
+	// test end
 
 	static const size_t hash_order_type = typeid(order_type).hash_code();
 	shared.hash_order_type = hash_order_type;
@@ -307,7 +362,9 @@ layeredOut::layer layeredOut::createLayer(winSize_t size, const T& order_v) noex
 		return layer(0, key);
 
 	try{
-		std::optional<layeredOut::rawListIter> orderIter = orderCreateLayer(this->order, &order_v);
+		std::optional<layeredOut::rawListIter> orderIter
+		= orderCreateLayer(this->order, &order_v);
+
 		if(!orderIter)
 			return layer(0, key);
 
