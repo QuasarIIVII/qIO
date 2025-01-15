@@ -1,4 +1,4 @@
-#include "qio.h"
+#include "qio.hpp"
 
 using qIO::layeredOut;
 using qIO::size2d;
@@ -121,17 +121,21 @@ layeredOut::layer::layer(int, key_t) noexcept
 {}
 
 // Implementation of qIO::layeredOut::layerStream
-layeredOut::layerStream::layerStream(layer& layer_v, key_t) noexcept
+
+layeredOut::layerStream::layerStream(layer& layer_v, winPoint_t cursor_v, key_t) noexcept
 :	layer_v(layer_v)
+,	cursor_v(cursor_v)
 {
 	std::cout<<"layerStream::layerStream(layer&, key_t)"<<std::endl;
 }
 
+/*
 layeredOut::layerStream::layerStream(layerStream&& other) noexcept
 :	layer_v(other.layer_v), oss(std::move(other.oss))
 {
 	std::cout<<"layerStream::layerStream(layerStream&&)"<<std::endl;
 }
+*/
 
 layeredOut::layerStream::~layerStream() noexcept{
 	std::cout<<"layerStream::~layerStream()"<<std::endl;
