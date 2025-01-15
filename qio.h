@@ -18,6 +18,8 @@
 
 #include <mutex>
 
+#include<cassert>
+
 #include "target_sys.h"
 
 #if __has_include(<unistd.h>) && __has_include(<sys/ioctl.h>)
@@ -40,6 +42,11 @@ constexpr bool is_three_way_strong_comparable_v = three_way_strong_comparable<T>
 template<class T>
 concept threeWayStrongComparable_t = is_three_way_strong_comparable_v<T>;
 
+template<int a>
+consteval bool cmp(int b){
+	return a == b;
+}
+
 template<class T>
 struct moveOnly{
 	T a;
@@ -51,6 +58,14 @@ struct moveOnly{
 	moveOnly& operator=(moveOnly&&) = default;
 
 	moveOnly(T &&a) : a(std::move(a)) {}
+};
+
+template<class T>
+struct typeId{
+private:
+	static constexpr struct{} s{};
+public:
+	static constexpr const void *value = &s;
 };
 
 template<class T, std::size_t N>
@@ -196,7 +211,7 @@ private: // section private type declarations
 	};
 
 	struct shared_t{
-		size_t hash_order_type;
+		const void* hash_order_type;
 	};
 
 public: // section public types
@@ -263,9 +278,13 @@ private: // section private variables
 
 	std::list<layerData> layerList;
 
+	const void *orderTypeId;
+
 private: // section private function pointers
 	void (*deleteOrder)(layeredOut&) noexcept;
 	std::optional<rawListIter> (*orderCreateLayer)(void *inst, const void *order) noexcept;
+
+	layer (*createLayer_p)(layeredOut *const, winSize_t size, const void *order) noexcept;
 
 private: // section private static function declarations
 	static winSize_t winSize_f() noexcept;
@@ -274,11 +293,15 @@ private: // section private static function declarations
 	template<threeWayStrongComparable_t T>
 	static void _deleteOrder(layeredOut&) noexcept;
 
+	template<threeWayStrongComparable_t T>
+	static layer _createLayer(layeredOut *const, winSize_t size, const void *order) noexcept;
+
 public: // section public constructor and destructor declarations
 	template<threeWayStrongComparable_t T = int32_t>
 	explicit layeredOut(
 		uint32_t bgColor=0xff'000000
 	) noexcept;
+
 	~layeredOut() noexcept;
 
 public: // section public function declarations
@@ -305,6 +328,9 @@ layeredOut::layeredOut(
 ) noexcept
 :	state_v(0)
 ,	winSize_v(winSize_f())
+,	shared({typeId<order_type>::value})
+,	orderTypeId(typeId<order_type>::value)
+,	createLayer_p(_createLayer<order_type>)
 {
 	static_assert(sizeof(rawListIter) == sizeof(typename std::list<order_type>::iterator));
 	// test
@@ -317,8 +343,6 @@ layeredOut::layeredOut(
 
 	// test end
 
-	static const size_t hash_order_type = typeid(order_type).hash_code();
-	shared.hash_order_type = hash_order_type;
 
 	std::cout<<winSize_v.w<<'x'<<winSize_v.h<<std::endl;
 	if(!winSize_v.w){
@@ -357,18 +381,29 @@ layeredOut::layeredOut(
 
 template<threeWayStrongComparable_t T>
 layeredOut::layer layeredOut::createLayer(winSize_t size, const T& order_v) noexcept{
-	static const size_t hash_order_type = typeid(T).hash_code();
-	if(hash_order_type != shared.hash_order_type)
-		return layer(0, key);
+	static constexpr const void* id_type_T = typeId<T>::value;
+	assert(("type mismatch" && (orderTypeId == id_type_T)));
+
+	return createLayer_p(this, size, &order_v);
+}
+
+template<threeWayStrongComparable_t T>
+layeredOut::layer layeredOut::_createLayer(
+	layeredOut *const inst_p,
+	winSize_t size,
+	const void *order_p
+) noexcept
+{
+	const T& order_v = *static_cast<const T*>(order_p);
 
 	try{
 		std::optional<layeredOut::rawListIter> orderIter
-		= orderCreateLayer(this->order, &order_v);
+		= inst_p->orderCreateLayer(inst_p->order, &order_v);
 
 		if(!orderIter)
 			return layer(0, key);
 
-		layerList.emplace_back(layerData{
+		inst_p->layerList.emplace_back(layerData{
 			.visible = true,
 			.data = std::vector<std::vector<charData>>(
 				size.h,
@@ -384,7 +419,7 @@ layeredOut::layer layeredOut::createLayer(winSize_t size, const T& order_v) noex
 		return layer(0, key);
 	}
 
-	return layer(std::prev(layerList.end()), &shared, key);
+	return layer(std::prev(inst_p->layerList.end()), &inst_p->shared, key);
 }
 
 // Implementation of qIO::layeredOut::order_t

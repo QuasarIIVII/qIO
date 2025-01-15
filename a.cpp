@@ -7,8 +7,13 @@
 #include<sys/ioctl.h>
 
 int main() {
+	std::cout<<qIO::typeId<qIO::layeredOut>::value<<std::endl;
+	std::cout<<qIO::typeId<int>::value<<std::endl;
+
+	std::cout<<qIO::cmp<1>(3)<<std::endl;
+
 	qIO::layeredOut lo;
-	qIO::layeredOut::layer l = lo.createLayer(qIO::layeredOut::winSize_t{16, 16}, 0);
+	qIO::layeredOut::layer l = lo.createLayer({16, 16}, 0);
 	l << 1 << 2 << 3 << 4 << 5;
 	std::cout<<static_cast<uint16_t>(lo.state())<<std::endl;
 	lo.debug();
