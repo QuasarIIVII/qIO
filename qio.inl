@@ -96,7 +96,7 @@ layeredOut::layer layeredOut::_createLayer(
 				)
 			),
 			.pos = {0, 0},
-			.orderIter = std::move(*orderIter)
+			.orderIter = *orderIter
 		});
 	}catch(...){
 		return layer(0, key);
@@ -153,10 +153,14 @@ layeredOut::layerStream layeredOut::layer::operator<<(const T& a) noexcept{
 template<class T>
 layeredOut::layerStream&& layeredOut::layerStream::operator<<(const T& a) noexcept{
 	std::cout<<"layerStream::operator<<(const T&)"<<std::endl;
-//	oss << a;
-	layeredOut::layerStream& null = *reinterpret_cast<layeredOut::layerStream*>(reinterpret_cast<void*>(0));
-	std::cout<<"this address : "<<this<<std::endl;
-	std::cout<<"null address : "<<std::addressof(null)<<std::endl;
-	return std::move(null);
+	if(state_v & 0x01)
+		return std::move(*this);
+
+	try{
+		oss << a;
+	}catch(...){
+		state_v |= 0x01;
+	}
+
 	return std::move(*this);
 }

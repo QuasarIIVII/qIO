@@ -120,10 +120,15 @@ layeredOut::layer::layer(int, key_t) noexcept
 :	shared(nullptr)
 {}
 
+layeredOut::layerData& layeredOut::layer::data(key_t) noexcept{
+	return *iter;
+}
+
 // Implementation of qIO::layeredOut::layerStream
 
 layeredOut::layerStream::layerStream(layer& layer_v, winPoint_t cursor_v, key_t) noexcept
-:	layer_v(layer_v)
+:	state_v(0)
+,	layer_v(layer_v)
 ,	cursor_v(cursor_v)
 {
 	std::cout<<"layerStream::layerStream(layer&, key_t)"<<std::endl;
@@ -137,8 +142,21 @@ layeredOut::layerStream::layerStream(layerStream&& other) noexcept
 }
 */
 
+layeredOut::layerStream::layerStream(int, const layerStream &other) noexcept // bad constructor
+:	state_v(other.state_v|0x01)
+,	layer_v(other.layer_v)
+{
+	std::cout<<"layerStream::layerStream(int, const layerStream&)"<<std::endl;
+}
+
 layeredOut::layerStream::~layerStream() noexcept{
 	std::cout<<"layerStream::~layerStream()"<<std::endl;
+	decltype(layerData::data) &l = layer_v.data(key).data;
+	{
+		std::string_view::const_pointer p = oss.view().data();
+		std::string_view::const_pointer e = p + oss.view().size();
+		while(p < e)std::cout<<static_cast<int>(*p)<<' ', p++;
+	}
 }
 
 // Implementation of qIO::layeredOut::spinlock

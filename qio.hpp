@@ -42,11 +42,6 @@ constexpr bool is_three_way_strong_comparable_v = three_way_strong_comparable<T>
 template<class T>
 concept threeWayStrongComparable_t = is_three_way_strong_comparable_v<T>;
 
-template<int a>
-consteval bool cmp(int b){
-	return a == b;
-}
-
 template<class T>
 struct moveOnly{
 	T a;
@@ -94,6 +89,7 @@ struct point2d : public std::array<T, 2>{
 	T &x = (*this)[0];
 	T &y = (*this)[1];
 };
+
 template<class T>
 struct size2d : public qIO::array<T, 2>{
 	T &w = (*this)[0];
@@ -119,6 +115,15 @@ struct size2d : public qIO::array<T, 2>{
 		this->qIO::array<T, 2>::operator=(other);
 		return *this;
 	}
+};
+
+struct pair_unicode_len{
+	union{
+		uint64_t i64;
+		std::array<uint32_t, 2> i32;
+	} data;
+	uint32_t &unicode = data.i32[0];
+	uint32_t &len = data.i32[1];
 };
 
 class layeredOut{
@@ -231,6 +236,7 @@ public: // section public types
 		layer(layer&&) noexcept = default;
 
 	public: // section layeredOut internal function declarations
+		layerData& data(key_t) noexcept;
 
 	public:
 		template<class T>
@@ -243,6 +249,11 @@ public: // section public types
 
 	class layerStream{
 	private:
+		/*
+		 * state_v
+		 * 0x01: bad bit
+		 */
+		uint8_t state_v;
 		layer &layer_v;
 		winPoint_t cursor_v;
 		std::ostringstream oss; // default constructor
@@ -253,11 +264,15 @@ public: // section public types
 		layerStream(const layerStream&) = delete;
 		layerStream(layerStream&&) noexcept = default;
 
+		layerStream(int, const layerStream&) noexcept; // bad constructor
+
 		~layerStream() noexcept;
 
 	public:
 		template<class T>
 		layerStream&& operator<<(const T&) noexcept;
+
+		std::ostringstream& getOss(){return oss;}
 	}; // scope end : class layerStream
 
 private: // section private variables
@@ -289,6 +304,7 @@ private: // section private function pointers
 private: // section private static function declarations
 	static winSize_t winSize_f() noexcept;
 	static int _charWidth(const char32_t&) noexcept;
+//	static 
 
 	template<threeWayStrongComparable_t T>
 	static void _deleteOrder(layeredOut&) noexcept;
