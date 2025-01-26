@@ -9,7 +9,7 @@
 int main() {
 	qIO::layeredOut lo;
 	qIO::layeredOut::layer l = lo.createLayer({16, 16}, 0);
-	std::cout<<(l << 1 << 2 << 3 << '\0' << 4 << 5).getOss().view().size()<<std::endl;
+	std::cout<<(l << 1 << 2 << 3 << "가" << 4 << 5).getOss().view().size()<<std::endl;
 	std::cout<<static_cast<uint16_t>(lo.state())<<std::endl;
 	lo.debug();
 	std::cout<<sizeof(std::unique_lock<std::mutex>)<<std::endl;

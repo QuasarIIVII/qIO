@@ -17,7 +17,7 @@ layeredOut::layeredOut(
 {
 	static_assert(sizeof(rawListIter) == sizeof(typename std::list<order_type>::iterator));
 	// test
-	winSize_t a = winSize_f();
+	wSize2d a = winSize_f();
 	size2d<size_t> b(a);
 
 	b.w = 0;
@@ -63,7 +63,7 @@ layeredOut::layeredOut(
 }
 
 template<threeWayStrongComparable_t T>
-layeredOut::layer layeredOut::createLayer(winSize_t size, const T& order_v) noexcept{
+layeredOut::layer layeredOut::createLayer(wSize2d size, const T& order_v) noexcept{
 	static constexpr const void* id_type_T = typeId<T>::value;
 	assert(("type mismatch" && (orderTypeId == id_type_T)));
 
@@ -73,7 +73,7 @@ layeredOut::layer layeredOut::createLayer(winSize_t size, const T& order_v) noex
 template<threeWayStrongComparable_t T>
 layeredOut::layer layeredOut::_createLayer(
 	layeredOut *const inst_p,
-	winSize_t size,
+	wSize2d size,
 	const void *order_p
 ) noexcept
 {
@@ -108,7 +108,7 @@ layeredOut::layer layeredOut::_createLayer(
 // Implementation of qIO::layeredOut::order_t
 
 template<threeWayStrongComparable_t T>
-layeredOut::order_t<T>::order_t(state_t &state_v, const winSize_t &winSize) noexcept{
+layeredOut::order_t<T>::order_t(state_t &state_v, const wSize2d &winSize) noexcept{
 	try{
 		oLayer[0] = oLayer[1] = oLayer[2]
 		= std::vector<std::vector<T>>(

@@ -26,11 +26,6 @@
 #include<sys/ioctl.h>
 #endif
 
-/*
- * `small size` means its size is small enough to be copied by a few instructions. (no move needed)
- * - e.g. <= 16 bytes
- */
-
 namespace qIO{
 
 template<class T>
@@ -85,9 +80,25 @@ struct array : public std::array<T, N>{
 };
 
 template<class T>
+struct size2d;
+
+template<class T>
 struct point2d : public std::array<T, 2>{
 	T &x = (*this)[0];
 	T &y = (*this)[1];
+
+	constexpr std::strong_ordering operator<=>(const size2d<T> &other) const noexcept{
+		if constexpr(std::is_unsigned_v<T>){
+			return x < other.w && y < other.h ? std::strong_ordering::less
+			:	x == other.w || y == other.h ? std::strong_ordering::equal
+			:	std::strong_ordering::greater;
+		}
+		else{
+			return 0 <= x && x < other.w && 0 <= y && y < other.h ? std::strong_ordering::less
+			:	x == other.w || y == other.h ? std::strong_ordering::equal
+			:	std::strong_ordering::greater;
+		}
+	}
 };
 
 template<class T>
@@ -96,12 +107,6 @@ struct size2d : public qIO::array<T, 2>{
 	T &h = (*this)[1];
 
 	size2d() = default;
-
-	template<class... U>
-	requires (std::is_convertible_v<U, T> && ...)
-	size2d(U... args) noexcept
-	:	qIO::array<T, 2>{static_cast<T>(args)...}
-	{}
 
 	size2d(const size2d&) noexcept = default;
 
@@ -115,12 +120,19 @@ struct size2d : public qIO::array<T, 2>{
 		this->qIO::array<T, 2>::operator=(other);
 		return *this;
 	}
+
+	template<class... U>
+	requires (std::is_convertible_v<U, T> && ...)
+	size2d(U... args) noexcept
+	:	qIO::array<T, 2>{static_cast<T>(args)...}
+	{}
 };
 
 struct pair_unicode_len{
 	union{
 		uint64_t i64;
 		std::array<uint32_t, 2> i32;
+		std::array<uint8_t, 8> i8;
 	} data;
 	uint32_t &unicode = data.i32[0];
 	uint32_t &len = data.i32[1];
@@ -138,10 +150,12 @@ private: // section private type aliases
 
 public: // section public type aliases
 #if __has_include(<unistd.h>)
-	static_assert(sizeof(winsize::ws_col)==sizeof(winsize::ws_row));
-	using winSize_t = size2d<decltype(winsize::ws_col)>;	// will be small size
-	using winPoint_t = point2d<decltype(winsize::ws_col)>;	// will be small size
+	static_assert(std::is_same_v<decltype(winsize{}.ws_col), decltype(winsize{}.ws_row)>);
+	using wSize = decltype(winsize::ws_col);
+	using wSize2d = size2d<wSize>;
+	using wPoint2d = point2d<wSize>;
 #endif
+	static_assert(std::is_integral_v<std::remove_reference<wSize>::type>);
 
 private: // section private type declarations
 	struct shared_t;
@@ -179,7 +193,7 @@ private: // section private type declarations
 		spinlock mtx;
 		std::array<char8_t, 4> ch = {0, };
 		charColorData color;
-		uchar offset;
+		uchar offset = 0;
 
 		charData() noexcept = default;
 
@@ -196,7 +210,7 @@ private: // section private type declarations
 	struct layerData{
 		bool visible;
 		std::vector<std::vector<charData>> data;
-		winPoint_t pos;
+		wPoint2d pos;
 		rawListIter orderIter;
 	};
 
@@ -207,7 +221,7 @@ private: // section private type declarations
 		std::list<T> layerList; // list of layer order
 
 	public:
-		order_t(state_t &, const winSize_t &) noexcept;
+		order_t(state_t &, const wSize2d &) noexcept;
 		~order_t() noexcept = default;
 
 		static std::optional<rawListIter> createLayer(
@@ -225,15 +239,17 @@ public: // section public types
 	class layer{
 	private: // section private variables
 		std::list<layerData>::iterator iter;
-		winPoint_t cursor_v;
+		wPoint2d cursor_v;
 
 		shared_t *shared; // layer (*this) is invalid if shared == nullptr
 
 	public: // section public constructor and destructor declarations
-		layer(std::list<layerData>::iterator, shared_t *, key_t) noexcept;
-		layer(int, key_t) noexcept; // create an invalid layer (shared = nullptr)
 		layer(const layer&) = delete;
 		layer(layer&&) noexcept = default;
+
+	public: // section layer internal constructor declarations
+		layer(std::list<layerData>::iterator, shared_t *, key_t) noexcept;
+		layer(int, key_t) noexcept; // create an invalid layer (shared = nullptr)
 
 	public: // section layeredOut internal function declarations
 		layerData& data(key_t) noexcept;
@@ -243,8 +259,8 @@ public: // section public types
 		layerStream operator<<(const T&) noexcept;
 
 		// getters and setters
-		winPoint_t cursor() const noexcept;
-		void cursor(const winPoint_t&) noexcept;
+		wPoint2d cursor() const noexcept;
+		void cursor(const wPoint2d&) noexcept;
 	}; // scope end : class layer
 
 	class layerStream{
@@ -255,16 +271,14 @@ public: // section public types
 		 */
 		uint8_t state_v;
 		layer &layer_v;
-		winPoint_t cursor_v;
+		wPoint2d cursor_v;
 		std::ostringstream oss; // default constructor
 
 	public:
-		layerStream(layer&, winPoint_t, key_t) noexcept;
+		layerStream(layer&, wPoint2d, key_t) noexcept;
 
 		layerStream(const layerStream&) = delete;
 		layerStream(layerStream&&) noexcept = default;
-
-		layerStream(int, const layerStream&) noexcept; // bad constructor
 
 		~layerStream() noexcept;
 
@@ -284,7 +298,7 @@ private: // section private variables
 	 */
 	state_t state_v;
 
-	winSize_t winSize_v;
+	wSize2d winSize_v;
 
 	std::array<std::vector<std::vector<charData>>, 3> oLayer; // output layer
 	void *order;
@@ -299,18 +313,18 @@ private: // section private function pointers
 	void (*deleteOrder)(layeredOut&) noexcept;
 	std::optional<rawListIter> (*orderCreateLayer)(void *inst, const void *order) noexcept;
 
-	layer (*createLayer_p)(layeredOut *const, winSize_t size, const void *order) noexcept;
+	layer (*createLayer_p)(layeredOut *const, wSize2d size, const void *order) noexcept;
 
 private: // section private static function declarations
-	static winSize_t winSize_f() noexcept;
-	static int _charWidth(const char32_t&) noexcept;
-//	static 
+	static wSize2d winSize_f() noexcept;
+	static int charWidth_f(const char32_t) noexcept;
+	static constexpr pair_unicode_len cvtUtf8To32(const char*) noexcept;
 
 	template<threeWayStrongComparable_t T>
 	static void _deleteOrder(layeredOut&) noexcept;
 
 	template<threeWayStrongComparable_t T>
-	static layer _createLayer(layeredOut *const, winSize_t size, const void *order) noexcept;
+	static layer _createLayer(layeredOut *const, wSize2d size, const void *order) noexcept;
 
 public: // section public constructor and destructor declarations
 	template<threeWayStrongComparable_t T = int32_t>
@@ -321,11 +335,11 @@ public: // section public constructor and destructor declarations
 	~layeredOut() noexcept;
 
 public: // section public function declarations
-	winSize_t winSize() const noexcept;
+	wSize2d winSize() const noexcept;
 	state_t state() const noexcept;
 
 	template<threeWayStrongComparable_t T>
-	layer createLayer(winSize_t size, const T& order) noexcept;
+	layer createLayer(wSize2d size, const T& order) noexcept;
 
 public: // section debug function declarations
 	void debug();
